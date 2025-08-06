@@ -11,6 +11,13 @@ export default defineConfig({
     port: 1234
   },
   plugins: [vue(), vueDevTools()],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: '@use "@/assets/scss/preprocess.scss" as *;'
+      }
+    }
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
