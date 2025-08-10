@@ -1,39 +1,25 @@
 // Color
-$primary: #4eacba;
-$secondary: #ba9370;
+$black: #000;
+$gray: #a8a8a8;
+$white: #fff;
 
-@mixin largeDesktop {
-  @media only screen and (max-width: 2560px) {
-    @content;
-  }
-}
-@mixin desktop {
-  @media only screen and (max-width: 1920px) {
-    @content;
-  }
-}
-@mixin min-desktop {
-  @media only screen and (max-width: 1440px) {
-    @content;
-  }
-}
-@mixin pad {
-  @media only screen and (max-width: 1200px) {
-    @content;
-  }
-}
-@mixin mobile {
-  @media only screen and (max-width: 767px) {
-    @content;
-  }
-}
-@mixin min-mobile {
-  @media only screen and (max-width: 375px) {
-    @content;
-  }
-}
-@mixin hover {
-  @media (hover: hover) {
-    @content;
-  }
-}
+// @mixin mobile {
+//   @media only screen and (min-width: 376px) {
+//     @content;
+//   }
+// }
+// @mixin pad {
+//   @media only screen and (min-width: 768px) {
+//     @content;
+//   }
+// }
+// @mixin min-desktop {
+//   @media only screen and (min-width: 1201px) {
+//     @content;
+//   }
+// }
+// @mixin desktop {
+//   @media only screen and (min-width: 1441px) {
+//     @content;
+//   }
+// }
