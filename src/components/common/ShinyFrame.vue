@@ -1,59 +1,65 @@
 <script lang="ts" setup>
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 
-const props = defineProps<{
-  shouldAnimate?: boolean
-  shape?: 'square' | 'heart'
-  aspectRatio?: number // 寬高比，默認為 1 (正方形)
-}>()
+const props = withDefaults(
+  defineProps<{
+    shape: 'square' | 'heart'
+    radius?: number
+    strokeWidth?: number
+    shouldAnimate?: boolean
+    revolutionsPerSecond?: number
+    dashRatio?: number
+    speedExponent?: number
+  }>(),
+  {
+    shape: 'square',
+    radius: 6,
+    strokeWidth: 2, // 邊框寬度 2px
+    shouldAnimate: true,
+    revolutionsPerSecond: 0.5, // 每秒轉 0.5 圈
+    dashRatio: 1 / 12, // 亮條長度佔路徑 1/12
+    speedExponent: 0.5 // 亮條加速指數  0.5
+  }
+)
 
 const wrapper = ref<HTMLElement | null>(null)
-const shapeElement = ref<SVGElement | null>(null)
-const size = ref(200)
+const aspectRatio = 1
+const size = ref(0)
+const pathLength = ref(0) // 路徑總長度
+const dashLength = ref(0) // 亮條長度
+const offset1 = ref(0) // 第一條亮條偏移
+const offset2 = ref(0) // 第二條亮條偏移
 
-const strokeWidth = 2
-const radius = 6
-const speed = 0.5 // 每秒轉幾圈（比例速度）
-const currentShape = computed(() => props.shape || 'square')
-const currentAspectRatio = computed(() => props.aspectRatio || 1)
-
-const pathLength = ref(0)
-const dashLength = ref(0) // 亮條長度，邊長的1/3
-const offset1 = ref(0)
-const offset2 = ref(0)
-
-// 控制是否顯示動畫線條
-const showAnimatedLines = computed(() => props.shouldAnimate ?? true)
+const shape = computed(() => props.shape)
+const radius = computed(() => props.radius)
+const strokeWidth = computed(() => props.strokeWidth)
+const revolutionsPerSecond = computed(() => props.revolutionsPerSecond)
+const dashRatio = computed(() => props.dashRatio)
+const speedExponent = computed(() => props.speedExponent)
+const showAnimatedLines = computed(() => props.shouldAnimate)
 
 // 根據形狀生成 SVG 路徑
 const shapePath = computed(() => {
-  const width = size.value - strokeWidth
-  const height = width / currentAspectRatio.value
-  const x = strokeWidth / 2
-  const y = strokeWidth / 2
+  const width = size.value - strokeWidth.value
+  const height = width / aspectRatio
+  const x = strokeWidth.value / 2
+  const y = strokeWidth.value / 2
 
-  switch (currentShape.value) {
+  switch (shape.value) {
     case 'heart':
-      // 使用使用者提供的新愛心 SVG 路徑並自動縮放置中
-      // 原始路徑座標範圍
+      // 愛心路徑自動縮放置中
       const rawCoords = { minX: -92.1667, maxX: 66.1667, minY: 0.364258, maxY: 145.635 }
       const rawWidth = rawCoords.maxX - rawCoords.minX
       const rawHeight = rawCoords.maxY - rawCoords.minY
-
-      // 保留一點邊距 (90% 區域)
       const targetW = width * 0.9
       const targetH = height * 0.9
-
-      // 等比縮放
       const scale = Math.min(targetW / rawWidth, targetH / rawHeight)
-
-      // 置中偏移
       const offsetX = x + (width - rawWidth * scale) / 2
       const offsetY = y + (height - rawHeight * scale) / 2
-
       const sx = (v: number) => offsetX + (v - rawCoords.minX) * scale
       const sy = (v: number) => offsetY + (v - rawCoords.minY) * scale
 
+      // 愛心 SVG 路徑
       return `M ${sx(-13)} ${sy(145.635)}
               L ${sx(-24.4792)} ${sy(135.185)}
               C ${sx(-65.25)} ${sy(98.2143)} ${sx(-92.1667)} ${sy(73.8309)} ${sx(-92.1667)} ${sy(43.9059)}
@@ -67,34 +73,83 @@ const shapePath = computed(() => {
 
     case 'square':
     default:
-      return `M ${x + radius} ${y}
-              L ${x + width - radius} ${y}
-              Q ${x + width} ${y} ${x + width} ${y + radius}
-              L ${x + width} ${y + height - radius}
-              Q ${x + width} ${y + height} ${x + width - radius} ${y + height}
-              L ${x + radius} ${y + height}
-              Q ${x} ${y + height} ${x} ${y + height - radius}
-              L ${x} ${y + radius}
-              Q ${x} ${y} ${x + radius} ${y} Z`
+      // 圓角方形路徑
+      return `M ${x + radius.value} ${y}
+              L ${x + width - radius.value} ${y}
+              Q ${x + width} ${y} ${x + width} ${y + radius.value}
+              L ${x + width} ${y + height - radius.value}
+              Q ${x + width} ${y + height} ${x + width - radius.value} ${y + height}
+              L ${x + radius.value} ${y + height}
+              Q ${x} ${y + height} ${x} ${y + height - radius.value}
+              L ${x} ${y + radius.value}
+              Q ${x} ${y} ${x + radius.value} ${y} Z`
   }
 })
-
-// 創建虛擬路徑元素來計算長度
+// 計算路徑長度
 const getPathLength = () => {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   path.setAttribute('d', shapePath.value)
   return path.getTotalLength()
 }
 
-let rafId: number
-let ro: ResizeObserver | null = null
+// 儲存動畫的 requestAnimationFrame 回傳的 ID，方便後續取消動畫
+let requestAnimationFrameId: number
+// 監聽元素尺寸變化，當元素大小改變時可以自動更新 SVG 的尺寸與路徑
+let resizeObserver: ResizeObserver | null = null
 let animationStartTime: number | null = null
 
-// 重置動畫狀態
 const resetAnimation = () => {
   animationStartTime = null
   offset1.value = 0
   offset2.value = pathLength.value > 0 ? -(pathLength.value / 2) : 0
+}
+const animate = (time: number) => {
+  if (showAnimatedLines.value) {
+    if (animationStartTime === null) {
+      animationStartTime = time
+    }
+    const elapsedTime = (time - animationStartTime) / 1000
+
+    // 確保路徑長度算出來後才開始動畫，避免一開始資料還沒準備好就執行動畫導致錯誤或閃爍
+    if (pathLength.value === 0) {
+      requestAnimationFrameId = requestAnimationFrame(animate)
+      return
+    }
+
+    // 基本週期進度：計算動畫目前這一圈的進度（0 表示剛開始，1 表示一圈結束），用來控制亮條在邊框上的位置
+    const baseCycleProgress = (elapsedTime * revolutionsPerSecond.value) % 1
+
+    // 動態速度調整：在水平邊（0-0.25 和 0.5-0.75）時加速
+    const getAdjustedProgress = (progress: number): number => {
+      const segment = progress * 4 // 將 0~1 的進度映射到 0~4，每個邊佔 1
+      const segmentIndex = Math.floor(segment) // 取得目前在第幾個邊（0,1,2,3）
+      const segmentProgress = segment - segmentIndex // 取得在這個邊上的進度（0~1）
+
+      let adjustedSegmentProgress
+      if (segmentIndex === 0 || segmentIndex === 2) {
+        // 在上邊（0~1）和下邊（2~3）時加速
+        // 上邊和下邊加速，使用平方根來增加速度
+        adjustedSegmentProgress = Math.pow(segmentProgress, speedExponent.value)
+      } else {
+        adjustedSegmentProgress = segmentProgress
+      }
+      return (segmentIndex + adjustedSegmentProgress) / 4
+    }
+
+    const adjustedProgress = getAdjustedProgress(baseCycleProgress)
+    const rotationOffset = adjustedProgress * pathLength.value
+
+    offset1.value = -rotationOffset
+
+    const secondProgress = getAdjustedProgress((baseCycleProgress + 0.5) % 1)
+    offset2.value = -(secondProgress * pathLength.value)
+  } else {
+    animationStartTime = null
+    offset1.value = 0
+    offset2.value = -(pathLength.value / 2)
+  }
+
+  requestAnimationFrameId = requestAnimationFrame(animate)
 }
 
 // 監聽動畫狀態變化
@@ -108,70 +163,16 @@ watch(
   { immediate: true }
 )
 
-const animate = (time: number) => {
-  // 只有在需要動畫時才計算偏移
-  if (showAnimatedLines.value) {
-    // 初始化動畫開始時間
-    if (animationStartTime === null) {
-      animationStartTime = time
-    }
-
-    const elapsedTime = (time - animationStartTime) / 1000 // 轉換為秒
-
-    if (pathLength.value === 0) {
-      rafId = requestAnimationFrame(animate)
-      return
-    }
-
-    // 基本週期進度
-    const baseCycleProgress = (elapsedTime * speed) % 1
-
-    // 計算動態速度：在水平邊（0-0.25 和 0.5-0.75）時加速
-    function getAdjustedProgress(progress: number): number {
-      const segment = progress * 4 // 將 0-1 映射到 0-4，每個邊佔 1
-      const segmentIndex = Math.floor(segment)
-      const segmentProgress = segment - segmentIndex
-
-      let adjustedSegmentProgress
-      // 在上邊（0-1）和下邊（2-3）時加速
-      if (segmentIndex === 0 || segmentIndex === 2) {
-        // 使用二次函數加速：y = x^0.7（比線性快，但不會太突兀）
-        adjustedSegmentProgress = Math.pow(segmentProgress, 0.5)
-      } else {
-        // 左邊和右邊保持正常速度
-        adjustedSegmentProgress = segmentProgress
-      }
-
-      return (segmentIndex + adjustedSegmentProgress) / 4
-    }
-
-    const adjustedProgress = getAdjustedProgress(baseCycleProgress)
-    const rotationOffset = adjustedProgress * pathLength.value
-
-    // 第一條線：沿著邊框順時針移動（使用負偏移）
-    offset1.value = -rotationOffset
-
-    // 第二條線：從相反位置開始
-    const secondProgress = getAdjustedProgress((baseCycleProgress + 0.5) % 1)
-    offset2.value = -(secondProgress * pathLength.value)
-  } else {
-    // 如果不需要動畫，重置偏移值和時間
-    animationStartTime = null
-    offset1.value = 0
-    offset2.value = -(pathLength.value / 2)
-  }
-
-  rafId = requestAnimationFrame(animate)
-}
 onMounted(() => {
   const updateSize = () => {
-    if (!wrapper.value) return
+    if (!wrapper.value) {
+      return
+    }
     size.value = wrapper.value.clientWidth
 
     const oldPathLength = pathLength.value
     pathLength.value = getPathLength()
-    // 線條長度 = 邊長的1/3，邊長 = 總周長/4，所以線條長度 = 總周長/12
-    dashLength.value = pathLength.value / 12
+    dashLength.value = pathLength.value * dashRatio.value
 
     // 如果路徑長度改變了，重置動畫
     if (oldPathLength !== pathLength.value) {
@@ -180,26 +181,33 @@ onMounted(() => {
   }
   updateSize()
 
-  ro = new ResizeObserver(() => {
+  // 監聽外層尺寸變化
+  resizeObserver = new ResizeObserver(() => {
     updateSize()
   })
-  if (wrapper.value) ro.observe(wrapper.value)
 
-  rafId = requestAnimationFrame(animate)
+  if (wrapper.value) {
+    resizeObserver.observe(wrapper.value)
+  }
+
+  requestAnimationFrameId = requestAnimationFrame(animate)
 })
 
 onBeforeUnmount(() => {
-  if (ro) ro.disconnect()
-  cancelAnimationFrame(rafId)
+  // 元件卸載時清理
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+  cancelAnimationFrame(requestAnimationFrameId)
 })
 </script>
 
 <template>
   <div ref="wrapper" class="box-wrapper">
-    <svg :width="size" :height="size / currentAspectRatio" :viewBox="`0 0 ${size} ${size / currentAspectRatio}`">
-      <!-- 背景邊框 -->
-      <path ref="shapeElement" :d="shapePath" fill="none" stroke="#666" :stroke-width="strokeWidth" />
-      <!-- 亮條 1 -->
+    <svg :width="size" :height="size" :viewBox="`0 0 ${size} ${size}`">
+      <!-- 邊框 -->
+      <path :d="shapePath" fill="none" stroke="gray" :stroke-width="strokeWidth" />
+      <!-- 邊框亮條 1 -->
       <path
         v-if="showAnimatedLines"
         :d="shapePath"
@@ -210,7 +218,7 @@ onBeforeUnmount(() => {
         :stroke-dasharray="`${dashLength} ${pathLength - dashLength}`"
         :stroke-dashoffset="offset1"
       />
-      <!-- 亮條 2 -->
+      <!-- 邊框亮條 2 -->
       <path
         v-if="showAnimatedLines"
         :d="shapePath"
@@ -228,7 +236,7 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 .box-wrapper {
   width: 100%;
-  aspect-ratio: v-bind(currentAspectRatio);
+  aspect-ratio: 1;
 
   svg {
     width: 100%;

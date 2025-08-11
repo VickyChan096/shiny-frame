@@ -1,10 +1,15 @@
-_README更新日期： 2025/8/6_
+_README更新日期： 2025/8/11_
 
 # Shiny Frame
 
 **Shiny Frame**
-Vue 3 + TypeScript + Vite 開發框架
 
+- Vue 3 + TypeScript + Vite 開發框架
+- 基礎走線動畫，4種格子數量切換模式(1x1、3x3、5x5、10x10)
+- 2種顯示模式切換 (All、Random)
+- 不同解析度下，可隨裝置適應大小
+- 不同瀏覽器運行(Safari、Chrome、Firefox)，均可正確顯示
+- 同樣需求下，任意不規則形狀仍有相同的動態表現
 - [GitHub](https://github.com/VickyChan096/shiny-frame)
 - [GitHub Pages](https://vickychan096.github.io/shiny-frame/)
 
@@ -17,7 +22,6 @@ Vue3, TypeScript, SCSS
 
 **開發規範要點**
 
-- 使用 @ 引入專案內部的檔案
 - 優先使用箭頭函式
 - 必要時加上註解
 
@@ -45,14 +49,6 @@ Vue3, TypeScript, SCSS
 
 - 使用 camelCase 命名法
 - 函數名稱應該是動詞或動詞短語
-- 常數可使用 UPPER_CASE
-- interface 不須前墜 I
-- block 的大誇號由同一行開始如
-
-```ts
-if (someBool) {
-}
-```
 
 **檔案與資料夾命名原則**
 
@@ -71,13 +67,9 @@ if (someBool) {
 
 **響應式設計斷點**
 
+- mobile-first
 - @mixin：
-  - largeDesktop (max-width: 2560px)
-  - desktop (max-width: 1920px)
-  - min-desktop (max-width: 1440px)
-  - pad (max-width: 1200px)
-  - mobile (max-width: 767px)
-  - min-mobile (max-width: 375px)
+  - mobile (min-width: 390px)
 
 ## 專案設置
 
